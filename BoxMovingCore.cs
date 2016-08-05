@@ -78,15 +78,6 @@ namespace KakuBoxMoving
 
         private bool RunToStop(Func<T, bool> stopIndicator)
         {
-            if (this is KakuBoxMovingFinder)
-            {
-                return RunToStopParallel(stopIndicator);
-            }          
-
-            return RunToStopSingle(stopIndicator);
-        }
-        private bool RunToStopSingle(Func<T, bool> stopIndicator)
-        {
             bool stop = false;
             while (queue.HasNext && !stop)
             {
@@ -105,41 +96,6 @@ namespace KakuBoxMoving
                         if (!stop && stopIndicator != null) stop = stopIndicator((T)step.Final);
                     }
                 }
-            }
-            return stop;
-        }
-        
-        private bool RunToStopParallel(Func<T, bool> stopIndicator)
-        {
-            bool stop = false;
-            while (queue.HasNext && !stop)
-            {
-                var current = queue.Next();
-                var steps = current.GetAllNextMoving();
-
-                var temList = new List<T>();
-
-                Parallel.ForEach(steps, () => new List<T>(), (step, loopState, localList) =>
-                {
-                    if (checker.Check(step))
-                    {
-                        localList.Add((T)step.Final);
-
-                        step.Final.Parent = current;
-
-                        if (!stop && stopIndicator != null && stopIndicator((T)step.Final)) stop = true;
-                    }
-                    return localList;
-                },
-                localList =>
-                {
-                    lock (temList)
-                    {
-                        temList.AddRange(localList);
-                    }
-                });
-                current.Children.AddRange(temList);
-                this.queue.AddRange(temList);
             }
             return stop;
         }
@@ -219,19 +175,12 @@ namespace KakuBoxMoving
                 return boxs[idx];
             }
         }
-        private string idd;
+
         public BoxState(IEnumerable<Point> boxs)
         {
             if (boxs.Count() == 0) throw new ArgumentException("boxs is empty.", "boxs");
 
-            this.boxs = boxs.OrderBy(point => point, Comparer<Point>.Create((p1, p2) =>
-                    {
-                        if (p1.X > p2.X) return 1;
-                        if (p1.X < p2.X) return -1;
-                        if (p1.Y > p2.Y) return 1;
-                        if (p1.Y < p2.Y) return -1;
-                        return 0;
-                    })).ToArray();
+            this.boxs = boxs.ToArray();
             this.Children = new List<BoxState>();
         }
 
@@ -283,12 +232,13 @@ namespace KakuBoxMoving
 
         public bool IsBoxStateEquals(BoxState state)
         {
-            if (state == null) return false;
-            if (state.boxs.Length != this.boxs.Length) return false;
+            if (state == null || state.boxs.Length != this.boxs.Length) return false;
 
-            for(int i=0;i<boxs.Length;i++)
+            var s = boxs.ToList();
+            var d = state.boxs.ToList();
+            for (int i = 0; i < boxs.Length; i++)
             {
-                if (boxs[i] != state.boxs[i]) return false;
+                if (!d.Remove(s[i])) return false;
             }
             return true;
         }
